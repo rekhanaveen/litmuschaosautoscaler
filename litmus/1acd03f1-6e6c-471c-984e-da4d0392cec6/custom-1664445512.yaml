@@ -1,0 +1,213 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  creationTimestamp: null
+  labels:
+    cluster_id: 02b4c0b8-c678-4871-b548-de4baecc6c89
+    subject: custom_litmus
+    workflow_id: 63b508f0-9e63-4991-a82c-846ff3644ea1
+    workflows.argoproj.io/controller-instanceid: 02b4c0b8-c678-4871-b548-de4baecc6c89
+  name: custom-1664445512
+  namespace: litmus
+spec:
+  arguments:
+    parameters:
+    - name: adminModeNamespace
+      value: litmus
+  entrypoint: custom-chaos
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  serviceAccountName: argo-chaos
+  templates:
+  - inputs: {}
+    metadata: {}
+    name: custom-chaos
+    outputs: {}
+    steps:
+    - - arguments: {}
+        name: install-chaos-experiments
+        template: install-chaos-experiments
+    - - arguments: {}
+        name: pod-autoscaler-e9q
+        template: pod-autoscaler-e9q
+  - container:
+      args:
+      - kubectl apply -f /tmp/pod-autoscaler-e9q.yaml -n {{workflow.parameters.adminModeNamespace}}
+        &&  sleep 30
+      command:
+      - sh
+      - -c
+      image: litmuschaos/k8s:2.12.0
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: pod-autoscaler-e9q
+        path: /tmp/pod-autoscaler-e9q.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            description:
+              message: |
+                Scale the application replicas and test the node autoscaling on cluster
+            kind: ChaosExperiment
+            metadata:
+              name: pod-autoscaler
+              labels:
+                name: pod-autoscaler
+                app.kubernetes.io/part-of: litmus
+                app.kubernetes.io/component: chaosexperiment
+                app.kubernetes.io/version: 2.12.0
+            spec:
+              definition:
+                scope: Cluster
+                permissions:
+                  - apiGroups:
+                      - ""
+                    resources:
+                      - pods
+                    verbs:
+                      - create
+                      - delete
+                      - get
+                      - list
+                      - patch
+                      - update
+                      - deletecollection
+                  - apiGroups:
+                      - ""
+                    resources:
+                      - events
+                    verbs:
+                      - create
+                      - get
+                      - list
+                      - patch
+                      - update
+                  - apiGroups:
+                      - ""
+                    resources:
+                      - configmaps
+                    verbs:
+                      - get
+                      - list
+                  - apiGroups:
+                      - ""
+                    resources:
+                      - pods/log
+                    verbs:
+                      - get
+                      - list
+                      - watch
+                  - apiGroups:
+                      - ""
+                    resources:
+                      - pods/exec
+                    verbs:
+                      - get
+                      - list
+                      - create
+                  - apiGroups:
+                      - apps
+                    resources:
+                      - deployments
+                      - statefulsets
+                    verbs:
+                      - list
+                      - get
+                      - patch
+                      - update
+                  - apiGroups:
+                      - batch
+                    resources:
+                      - jobs
+                    verbs:
+                      - create
+                      - list
+                      - get
+                      - delete
+                      - deletecollection
+                  - apiGroups:
+                      - litmuschaos.io
+                    resources:
+                      - chaosengines
+                      - chaosexperiments
+                      - chaosresults
+                    verbs:
+                      - create
+                      - list
+                      - get
+                      - patch
+                      - update
+                      - delete
+                image: litmuschaos/go-runner:2.12.0
+                imagePullPolicy: Always
+                args:
+                  - -c
+                  - ./experiments -name pod-autoscaler
+                command:
+                  - /bin/bash
+                env:
+                  - name: TOTAL_CHAOS_DURATION
+                    value: "60"
+                  - name: RAMP_TIME
+                    value: ""
+                  - name: REPLICA_COUNT
+                    value: "5"
+                  - name: LIB
+                    value: litmus
+                labels:
+                  name: pod-autoscaler
+                  app.kubernetes.io/part-of: litmus
+                  app.kubernetes.io/component: experiment-job
+                  app.kubernetes.io/version: 2.12.0
+    metadata: {}
+    name: install-chaos-experiments
+    outputs: {}
+  - container:
+      args:
+      - -file=/tmp/chaosengine-pod-autoscaler-e9q.yaml
+      - -saveName=/tmp/engine-name
+      image: litmuschaos/litmus-checker:2.12.0
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: pod-autoscaler-e9q
+        path: /tmp/chaosengine-pod-autoscaler-e9q.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            kind: ChaosEngine
+            metadata:
+              namespace: "{{workflow.parameters.adminModeNamespace}}"
+              generateName: pod-autoscaler-e9q
+              labels:
+                workflow_run_id: "{{workflow.uid}}"
+            spec:
+              engineState: active
+              auxiliaryAppInfo: ""
+              appinfo:
+                appns: default
+                applabel: app=nginx
+                appkind: deployment
+              chaosServiceAccount: litmus-admin
+              experiments:
+                - name: pod-autoscaler
+                  spec:
+                    components:
+                      env:
+                        - name: TOTAL_CHAOS_DURATION
+                          value: "60"
+                        - name: REPLICA_COUNT
+                          value: "10"
+                    probe: []
+    metadata:
+      labels:
+        weight: "10"
+    name: pod-autoscaler-e9q
+    outputs: {}
+status:
+  finishedAt: null
+  startedAt: null
